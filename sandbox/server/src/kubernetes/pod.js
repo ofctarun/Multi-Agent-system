@@ -12,20 +12,23 @@ export async function createPod(sandboxId) {
         spec: {
             containers: [
                 {
-                    image: "template",
+                    image: "template:latest",
                     imagePullPolicy: "IfNotPresent",
                     name: "sandbox-container",
-                    ports: [{containerPort: 5173,name: "http"}],
+                    ports: [{ containerPort: 5173, name: "http" }],
                     resources: {
-                        limits: {cpu: "500m", memory: "1Gi"},
-                        requests: {cpu: "250m",memory: "500Mi"}
+                        limits: { cpu: "500m", memory: "1Gi" },
+                        requests: { cpu: "250m", memory: "500Mi" }
                     }
                 }
             ]
         }
     }
-
-    const response = await k8sCoreV1Api.createNamespacedPod('default', podManifest);
+    
+    const response = await k8sCoreV1Api.createNamespacedPod({
+        namespace: "default",
+        body: podManifest,
+    });
 
     return response;
 }
