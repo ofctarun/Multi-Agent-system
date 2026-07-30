@@ -1,6 +1,9 @@
 import express from "express";
 import morgan from "morgan";
 import {createProxyMiddleware} from "http-proxy-middleware";
+import dns from "node:dns";
+
+dns.setDefaultResultOrder('ipv4first');
 
 const app = express();
 app.use(morgan("combined"));
