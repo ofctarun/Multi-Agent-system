@@ -24,10 +24,13 @@ function getProxy(sandboxId){
             target: `http://sandbox-service-${sandboxId}`,
             changeOrigin: true,
             ws: true,
+            onError: (err, req, res) => {
+                console.error(`Proxy error for sandbox ${sandboxId}:`, err.message);
+                res.status(502).send(`Bad Gateway: Could not connect to sandbox container (${err.message})`);
+            }
         });
     }
     return proxies[sandboxId];
-
 }
 
 app.use((req,res,next)=>{
