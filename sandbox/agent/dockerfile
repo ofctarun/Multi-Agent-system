@@ -12,4 +12,4 @@ EXPOSE 3000
 
 RUN mkdir /workspace
 
-CMD ["node", "server.js"]
+CMD ["npm", "run", "dev"]
