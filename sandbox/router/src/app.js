@@ -17,6 +17,22 @@ app.get("/api/status/readyz", (req, res) => {
 });
 
 const proxies = {};
+const agentProxies = {};
+
+function getAgentProxy(sandboxId){
+    if(!agentProxies[sandboxId]){
+        agentProxies[sandboxId] = createProxyMiddleware({
+            target: `http://sandbox-service-${sandboxId}:3000`,
+            changeOrigin: true,
+            ws: true,
+            onError: (err, req, res) => {
+                console.error(`Agent proxy error for sandbox ${sandboxId}:`, err.message);
+                res.status(502).send(`Bad Gateway: Could not connect to agent container (${err.message})`);
+            }
+        });
+    }
+    return agentProxies[sandboxId];
+}
 
 function getProxy(sandboxId){
     if(!proxies[sandboxId]){
@@ -35,11 +51,14 @@ function getProxy(sandboxId){
 
 app.use((req,res,next)=>{
     const host = req.headers.host;
-    const sandboxId = host.split('.')[0];
 
-    const target = `http://sandbox-service-${sandboxId}`;
-
-    return getProxy(sandboxId)(req, res, next);
+    if(host.includes("agent")){
+        const sandboxId = host.split('.')[0];
+        return getAgentProxy(sandboxId)(req,res,next);
+    }else if(host.includes("preview")){
+        const sandboxId = host.split('.')[0];
+        return getProxy(sandboxId)(req,res,next);
+    }
 });
 
 export default app;
