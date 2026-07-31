@@ -19,7 +19,7 @@ export const createService = async (sandboxId) => {
                     protocol: 'TCP',
                     port: 80,
                     targetPort: 5173,
-                    name: 'http'
+                    name: 'frontend'
                 },
                 {
                     protocol: 'TCP',
