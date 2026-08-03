@@ -8,7 +8,7 @@ export const listFiles = tool(
         console.log("using list files tool");
         console.log("================================");
 
-        const response = await axios.get('http://019fc5fb-f7d9-71ab-82b5-07aad1333f1b.agent.localhost/list-files')
+        const response = await axios.get('http://019fc6bf-289d-753f-b34c-f12f51dd0a4c.agent.localhost/list-files')
 
         console.log("================================");
         console.log("response from list files tool", response.data.files);
@@ -29,7 +29,7 @@ export const readFiles = tool(
         console.log("using read files tool", files);
         console.log("================================");
 
-        const response = await axios.get('http://019fc5fb-f7d9-71ab-82b5-07aad1333f1b.agent.localhost/read-files?files=' + files.join(','));
+        const response = await axios.get('http://019fc6bf-289d-753f-b34c-f12f51dd0a4c.agent.localhost/read-files?files=' + files.join(','));
 
         console.log("================================");
         console.log("response from read files tool", response.data);
@@ -53,7 +53,7 @@ export const updateFiles = tool(
         console.log("using update files tool");
         console.log("================================");
 
-        const response = await axios.post('http://019fc5fb-f7d9-71ab-82b5-07aad1333f1b.agent.localhost/update-files',
+        const response = await axios.post('http://019fc6bf-289d-753f-b34c-f12f51dd0a4c.agent.localhost/update-files',
             { updates: files });
 
         console.log("================================");
@@ -76,7 +76,7 @@ export const updateFiles = tool(
 
 // export const createFiles = tool(
 //     async({files}) => {
-//         const response = await axios.post('http://019fc5fb-f7d9-71ab-82b5-07aad1333f1b.agent.localhost/create-files',
+//         const response = await axios.post('http://019fc6bf-289d-753f-b34c-f12f51dd0a4c.agent.localhost/create-files',
 //             { files: files });
 //         return JSON.stringify(response.data.results);
 //     },

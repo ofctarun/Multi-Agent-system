@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { ChatMistralAI } from "@langchain/mistralai";
 import { listFiles, readFiles, updateFiles } from "./tools.js";
 import { createAgent } from "langchain";
