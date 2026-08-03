@@ -5,7 +5,8 @@ import { createAgent } from "langchain";
 
 const model = new ChatMistralAI({
     model: "mistral-medium-latest",
-    apiKey: process.env.MISTRAL_API_KEY
+    apiKey: process.env.MISTRAL_API_KEY,
+    temperature: 0.7,
 });
 
 const agent = createAgent({
@@ -17,7 +18,7 @@ await agent.invoke({
     messages: [
         {
             role: "user",
-            content: "update the theme of the project to light."
+            content: "create a simple snake game in the project using react and css."
         }
     ]
 })
