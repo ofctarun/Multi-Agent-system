@@ -2,7 +2,7 @@ import axios from 'axios';
 import { tool } from 'langchain';
 import * as z from 'zod';
 
-const SANDBOX_ID = "019fc73d-0604-77bf-a12e-1a769fef4192";
+const SANDBOX_ID = "01a010dc-cdb0-77df-ab25-5a3f8c6260ee";
 const SANDBOX_HOST = `${SANDBOX_ID}.agent.localhost`;
 // Node can't resolve *.localhost subdomains (only the literal "localhost"),
 // so hit the ingress controller's real address and set Host manually.
