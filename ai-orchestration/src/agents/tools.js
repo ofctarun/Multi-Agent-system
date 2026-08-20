@@ -2,13 +2,16 @@ import axios from 'axios';
 import { tool } from 'langchain';
 import * as z from 'zod';
 
-const SANDBOX_ID = "01a010dc-cdb0-77df-ab25-5a3f8c6260ee";
-const SANDBOX_HOST = `${SANDBOX_ID}.agent.localhost`;
-// Node can't resolve *.localhost subdomains (only the literal "localhost"),
-// so hit the ingress controller's real address and set Host manually.
+const SANDBOX_ID = "01a01d48-f3e0-77ee-950c-a27ab9c265bb";
+
+// Talk to the sandbox's K8s Service directly — no router-service, no Host
+// header. This works because ai-server is a pod in the same cluster/namespace
+// as the sandbox, so CoreDNS resolves `sandbox-service-<id>` for us. The
+// router-service + Host-header trick is only needed for traffic coming from
+// outside the cluster (browsers hitting *.preview.localhost), which can't do
+// K8s DNS lookups.
 const sandboxApi = axios.create({
-    baseURL: 'http://127.0.0.1',
-    headers: { Host: SANDBOX_HOST }
+    baseURL: `http://sandbox-service-${SANDBOX_ID}:3000`,
 });
 
 export const listFiles = tool(
