@@ -2,7 +2,7 @@ import axios from 'axios';
 import { tool } from 'langchain';
 import * as z from 'zod';
 
-const SANDBOX_ID = "01a01d48-f3e0-77ee-950c-a27ab9c265bb";
+// const SANDBOX_ID = "01a01d48-f3e0-77ee-950c-a27ab9c265bb";
 
 // Talk to the sandbox's K8s Service directly — no router-service, no Host
 // header. This works because ai-server is a pod in the same cluster/namespace
@@ -10,22 +10,24 @@ const SANDBOX_ID = "01a01d48-f3e0-77ee-950c-a27ab9c265bb";
 // router-service + Host-header trick is only needed for traffic coming from
 // outside the cluster (browsers hitting *.preview.localhost), which can't do
 // K8s DNS lookups.
-const sandboxApi = axios.create({
-    baseURL: `http://sandbox-service-${SANDBOX_ID}:3000`,
-});
+// const sandboxApi = axios.create({
+//     baseURL: `http://sandbox-service-${SANDBOX_ID}:3000`,
+// });
 
 export const listFiles = tool(
-    async ({ }) => {
-        console.log("================================");
-        console.log("using list files tool");
-        console.log("================================");
+    async ({ }, config) => {
+        
+        const writer = config.writer;
+        writer("Listing files in the project directory...\n");
 
         try {
-            const response = await sandboxApi.get('/list-files');
+            const response = await axios.get(`http://sandbox-service-${config.context.projectId}:3000/list-files`);
             console.log("response from list files tool", response.data.files);
+            writer("Files listed successfully.\n");
             return JSON.stringify(response.data.files);
         } catch (err) {
             console.error("list-files tool failed:", err.message);
+            writer("Failed to list files.\n");
             return JSON.stringify({ error: `list-files failed: ${err.message}` });
         }
     },
@@ -37,18 +39,19 @@ export const listFiles = tool(
 );
 
 export const readFiles = tool(
-    async ({ files }) => {
+    async ({ files }, config) => {
 
-        console.log("================================");
-        console.log("using read files tool", files);
-        console.log("================================");
+        const writer = config.writer;
+        writer(`Reading content of files: ${files.join(', ')}...\n`);
 
         try {
-            const response = await sandboxApi.get('/read-files?files=' + files.join(','));
+            const response = await axios.get(`http://sandbox-service-${config.context.projectId}:3000/read-files?files=` + files.join(','));
             console.log("response from read files tool", response.data);
+            writer("Files read successfully.\n");
             return JSON.stringify(response.data);
         } catch (err) {
             console.error("read-files tool failed:", err.message);
+            writer("Failed to read files.\n");
             return JSON.stringify({ error: `read-files failed: ${err.message}` });
         }
     },
@@ -62,10 +65,10 @@ export const readFiles = tool(
 );
 
 export const updateFiles = tool(
-    async ({ files }) => {
-        console.log("================================");
-        console.log("using update files tool");
-        console.log("================================");
+    async ({ files }, config) => {
+
+        const writer = config.writer;
+        writer("Updating files...\n");
 
         // Sandbox agent's /update-files route expects each item shaped
         // { file, content } — not { path, content }. Translate here so the
@@ -73,11 +76,12 @@ export const updateFiles = tool(
         const updates = files.map(({ path, content }) => ({ file: path, content }));
 
         try {
-            const response = await sandboxApi.patch('/update-files', { updates });
-            console.log("response from update files tool", response.data);
+            const response = await axios.patch(`http://sandbox-service-${config.context.projectId}:3000/update-files`, { updates });
+            writer("Files updated successfully.\n");
             return JSON.stringify(response.data.results);
         } catch (err) {
             console.error("update-files tool failed:", err.message);
+            writer("Failed to update files.\n");
             return JSON.stringify({ error: `update-files failed: ${err.message}` });
         }
     },
