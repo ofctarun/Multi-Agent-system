@@ -1,5 +1,6 @@
 import express from "express";
 import morgan from "morgan";
+import http from "http";
 import {createProxyMiddleware} from "http-proxy-middleware";
 import dns from "node:dns";
 
@@ -61,4 +62,25 @@ app.use((req,res,next)=>{
     }
 });
 
-export default app;
+// Create the HTTP server explicitly
+const server = http.createServer(app);
+
+server.on('upgrade', (req, socket, head) => {
+    const host = req.headers.host;
+    const sandboxId = host.split('.')[0];
+    const type = host.split('.')[1];
+
+    console.log(`WS upgrade request: ${host}, sandboxId: ${sandboxId}, type: ${type}`);
+
+    if(type === "agent"){
+        const proxy = getAgentProxy(sandboxId);
+        proxy.upgrade(req, socket, head);
+    } else if(type === "preview"){
+        const proxy = getProxy(sandboxId);
+        proxy.upgrade(req, socket, head);
+    } else {
+        socket.destroy();
+    }
+});
+
+export default server;
