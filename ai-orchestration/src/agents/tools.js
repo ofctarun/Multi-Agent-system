@@ -23,7 +23,7 @@ export const listFiles = tool(
         try {
             const response = await axios.get(`http://sandbox-service-${config.context.projectId}:3000/list-files`);
             console.log("response from list files tool", response.data.files);
-            writer("Files listed successfully.\n");
+            writer("Files listed successfully.\n" + "Files: " + response.data.files.join(", ")+"\n");
             return JSON.stringify(response.data.files);
         } catch (err) {
             console.error("list-files tool failed:", err.message);
@@ -47,7 +47,7 @@ export const readFiles = tool(
         try {
             const response = await axios.get(`http://sandbox-service-${config.context.projectId}:3000/read-files?files=` + files.join(','));
             console.log("response from read files tool", response.data);
-            writer("Files read successfully.\n");
+            writer("Files read successfully."+files.join(", ")+"\n");
             return JSON.stringify(response.data);
         } catch (err) {
             console.error("read-files tool failed:", err.message);
@@ -68,7 +68,7 @@ export const updateFiles = tool(
     async ({ files }, config) => {
 
         const writer = config.writer;
-        writer("Updating files...\n");
+        writer("Updating files..."+files.map(f => f.path).join(", ")+"\n");
 
         // Sandbox agent's /update-files route expects each item shaped
         // { file, content } — not { path, content }. Translate here so the
