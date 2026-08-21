@@ -110,7 +110,7 @@ export default function App() {
           {/* Main content area */}
           <div className="flex-1 overflow-hidden">
             {activeTab === 'preview' ? (
-              <PreviewFrame sandboxId={sandboxId} previewUrl={previewUrl} podReady={podReady} />
+              <PreviewFrame sandboxId={sandboxId} previewUrl={previewUrl} podReady={podReady} fileRefreshKey={fileRefreshKey} />
             ) : (
               <FileViewer agentBase={agentBase} filePath={activeFile} onFileSaved={handleFilesChanged} />
             )}

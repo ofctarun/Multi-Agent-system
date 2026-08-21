@@ -1,12 +1,25 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 
-export default function PreviewFrame({ sandboxId, previewUrl, podReady }) {
+export default function PreviewFrame({ sandboxId, previewUrl, podReady, fileRefreshKey }) {
   const iframeRef = useRef(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [loading, setLoading] = useState(true)
+  const initialFileKey = useRef(fileRefreshKey)
 
   // Direct preview URL e.g. http://01a022c2-c028-76a9-90e9-70f7375eabe6.preview.localhost/
   const activeUrl = previewUrl || (sandboxId ? `http://${sandboxId}.preview.localhost/` : '')
+
+  // Auto-refresh when files change (since HMR is disabled in sandbox)
+  useEffect(() => {
+    // Skip the initial mount — only refresh on subsequent file changes
+    if (fileRefreshKey === initialFileKey.current) return
+    // Small delay so the sandbox Vite server can pick up the file changes
+    const timer = setTimeout(() => {
+      setLoading(true)
+      setRefreshKey(k => k + 1)
+    }, 1500)
+    return () => clearTimeout(timer)
+  }, [fileRefreshKey])
 
   const handleRefresh = () => {
     setLoading(true)
