@@ -14,22 +14,9 @@ export default function SplashScreen({ onSandboxCreated }) {
   const [projectsLoading, setProjectsLoading] = useState(true)
   const [showDropdown, setShowDropdown] = useState(false)
 
-  // Fetch existing projects on mount
+  // Existing projects
   useEffect(() => {
-    const fetchProjects = async () => {
-      try {
-        const res = await apiFetch('/api/sandbox/project')
-        if (res.ok) {
-          const data = await res.json()
-          setProjects(data.projects || [])
-        }
-      } catch {
-        // Silently ignore — user may not be logged in yet
-      } finally {
-        setProjectsLoading(false)
-      }
-    }
-    fetchProjects()
+    setProjectsLoading(false)
   }, [])
 
   // Animated dots while loading

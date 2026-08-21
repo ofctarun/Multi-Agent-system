@@ -19,7 +19,7 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
-      // 2. Agent Subdomain Proxy (injects Host header from originalUrl)
+      // 2. Agent Subdomain Proxy
       '/agent-proxy': {
         target: 'http://127.0.0.1:80',
         changeOrigin: false,
@@ -29,29 +29,27 @@ export default defineConfig({
           proxy.on('proxyReq', (proxyReq, req) => {
             const rawUrl = req.originalUrl || req.url || '';
             const parts = rawUrl.split('?')[0].split('/').filter(Boolean);
-            // rawUrl is e.g. /agent-proxy/01a022ba-efbc-7398-ae7c-12afd4d29674/list-files
             const sandboxId = parts[1];
             if (sandboxId) {
-              const hostHeader = `${sandboxId}.agent.localhost`;
-              proxyReq.setHeader('Host', hostHeader);
+              proxyReq.setHeader('Host', `${sandboxId}.agent.localhost`);
             }
           });
         },
         rewrite: (path) => path.replace(/^\/agent-proxy\/[^/]+/, ''),
       },
-      // 3. Preview Subdomain Proxy (injects Host header from originalUrl)
+      // 3. Preview Subdomain Proxy
       '/preview-proxy': {
         target: 'http://127.0.0.1:80',
         changeOrigin: false,
         secure: false,
+        ws: true,
         configure: (proxy) => {
           proxy.on('proxyReq', (proxyReq, req) => {
             const rawUrl = req.originalUrl || req.url || '';
             const parts = rawUrl.split('?')[0].split('/').filter(Boolean);
             const sandboxId = parts[1];
             if (sandboxId) {
-              const hostHeader = `${sandboxId}.preview.localhost`;
-              proxyReq.setHeader('Host', hostHeader);
+              proxyReq.setHeader('Host', `${sandboxId}.preview.localhost`);
             }
           });
         },

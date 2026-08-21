@@ -27,7 +27,7 @@ export default function App() {
 
   const handleSandboxCreated = useCallback((data) => {
     const agentBase = `/agent-proxy/${data.sandboxId}`
-    const previewUrl = `/preview-proxy/${data.sandboxId}/`
+    const previewUrl = data.previewUrl || `http://${data.sandboxId}.preview.localhost/`
     setSandbox({ sandboxId: data.sandboxId, previewUrl, agentBase })
     setStatus('ready')
     setPodReady(false)
@@ -110,7 +110,7 @@ export default function App() {
           {/* Main content area */}
           <div className="flex-1 overflow-hidden">
             {activeTab === 'preview' ? (
-              <PreviewFrame previewUrl={previewUrl} podReady={podReady} />
+              <PreviewFrame sandboxId={sandboxId} previewUrl={previewUrl} podReady={podReady} />
             ) : (
               <FileViewer agentBase={agentBase} filePath={activeFile} onFileSaved={handleFilesChanged} />
             )}

@@ -1,9 +1,12 @@
 import { useRef, useState } from 'react'
 
-export default function PreviewFrame({ previewUrl, podReady }) {
+export default function PreviewFrame({ sandboxId, previewUrl, podReady }) {
   const iframeRef = useRef(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [loading, setLoading] = useState(true)
+
+  // Direct preview URL e.g. http://01a022c2-c028-76a9-90e9-70f7375eabe6.preview.localhost/
+  const activeUrl = previewUrl || (sandboxId ? `http://${sandboxId}.preview.localhost/` : '')
 
   const handleRefresh = () => {
     setLoading(true)
@@ -34,8 +37,8 @@ export default function PreviewFrame({ previewUrl, podReady }) {
             <div className="w-3 h-3 rounded-full border border-t-transparent mr-2 shrink-0"
               style={{ borderColor: '#22d3ee', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
           )}
-          <span className="text-xs truncate" style={{ color: '#475569', fontFamily: 'monospace' }}>
-            {previewUrl}
+          <span className="text-xs truncate font-mono" style={{ color: '#94a3b8' }}>
+            {activeUrl}
           </span>
         </div>
 
@@ -53,7 +56,7 @@ export default function PreviewFrame({ previewUrl, podReady }) {
         </button>
 
         {/* Open in new tab */}
-        <a href={previewUrl} target="_blank" rel="noreferrer"
+        <a href={activeUrl} target="_blank" rel="noreferrer"
           className="p-1 rounded transition-colors cursor-pointer"
           style={{ color: '#475569' }}
           onMouseEnter={e => e.currentTarget.style.color = '#22d3ee'}
@@ -68,10 +71,9 @@ export default function PreviewFrame({ previewUrl, podReady }) {
       </div>
 
       {/* iFrame or Loading Pod Screen */}
-      <div className="flex-1 relative bg-[#070b14] flex flex-col items-center justify-center ">
+      <div className="flex-1 relative bg-[#070b14] flex flex-col items-center justify-center">
         {!podReady ? (
           <div className="flex flex-col items-center justify-center text-center max-w-sm animate-pulse">
-            {/* Premium Glowing/Rotating Spinner */}
             <div className="relative w-16 h-16 mb-6">
               <div className="absolute inset-0 rounded-full border-4 border-slate-800" />
               <div className="absolute inset-0 rounded-full border-4 border-t-transparent animate-spin"
@@ -92,7 +94,7 @@ export default function PreviewFrame({ previewUrl, podReady }) {
           <iframe
             key={refreshKey}
             ref={iframeRef}
-            src={previewUrl}
+            src={activeUrl}
             className="w-full h-full border-0"
             style={{ background: '#fff' }}
             title="Sandbox Preview"

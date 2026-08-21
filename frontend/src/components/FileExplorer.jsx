@@ -170,10 +170,12 @@ export default function FileExplorer({ agentBase, activeFile, onFileSelect, refr
     }
   }, [agentBase])
 
+  // Only reset podReady when agentBase changes (new sandbox created)
   useEffect(() => {
     setPodReady(false)
-  }, [agentBase, refreshKey])
+  }, [agentBase])
 
+  // Initial pod polling — runs until pod is ready
   useEffect(() => {
     if (!agentBase || podReady) return
 
@@ -187,6 +189,13 @@ export default function FileExplorer({ agentBase, activeFile, onFileSelect, refr
 
     return () => clearInterval(interval)
   }, [agentBase, podReady, fetchFiles])
+
+  // When refreshKey changes (e.g. after AI updates files), silently re-fetch file list
+  // without resetting podReady — the pod is already running
+  useEffect(() => {
+    if (!agentBase || !podReady) return
+    fetchFiles(true)
+  }, [refreshKey])
 
   return (
     <aside className="flex flex-col h-full"

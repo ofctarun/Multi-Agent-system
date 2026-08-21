@@ -163,4 +163,4 @@ Build the thing the user would build if they were a senior frontend engineer wit
 export default agent;
 
 // kubectl create secret generic ai-secret \
-//     --from-literal=MISTRAL_API_KEY=<YOUR_MISTRAL_API_KEY>
+//     --from-literal=MISTRAL_API_KEY="ffZZMPfu8a3YhVfn6cmaFIWY7tnRXYfi"
