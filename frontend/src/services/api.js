@@ -2,30 +2,44 @@
  * API Service for Sandbox Creation, File Management, AI SSE Stream, and Terminal
  */
 
-// Relative API base URL proxied by Vite dev server to http://localhost
+// Relative API base URL proxied by Vite dev server to http://127.0.0.1
 const API_BASE_URL = '/api';
 
 /**
  * Get agent backend URL for a specific sandboxId
- * e.g. http://019e31af-1e2a-70af-b4af-de437c588854.agent.localhost
  */
 export const getAgentUrl = (sandboxId) => {
+  if (!sandboxId) return 'http://127.0.0.1';
+  return `/agent-proxy/${sandboxId}`;
+};
+
+/**
+ * Get direct agent host URL for socket.io or direct fallback
+ */
+export const getDirectAgentUrl = (sandboxId) => {
   if (!sandboxId) return 'http://localhost';
   return `http://${sandboxId}.agent.localhost`;
 };
 
 /**
  * Get preview URL for a specific sandboxId
- * e.g. http://019e31af-1e2a-70af-b4af-de437c588854.preview.localhost
  */
 export const getPreviewUrl = (sandboxId) => {
+  if (!sandboxId) return 'http://localhost';
+  return `/preview-proxy/${sandboxId}/`;
+};
+
+/**
+ * Get direct preview URL
+ */
+export const getDirectPreviewUrl = (sandboxId) => {
   if (!sandboxId) return 'http://localhost';
   return `http://${sandboxId}.preview.localhost`;
 };
 
 /**
  * 1. Start Sandbox Environment
- * POST http://localhost/api/sandbox/start
+ * POST /api/sandbox/start -> Proxied to http://127.0.0.1/api/sandbox/start
  */
 export const startSandbox = async () => {
   try {
@@ -47,8 +61,25 @@ export const startSandbox = async () => {
       message: data.message || 'Sandbox created successfully',
     };
   } catch (error) {
-    console.warn('API call failed to start sandbox, generating fallback sandbox session:', error);
-    // Fallback sandbox state for resilience/offline testing
+    console.warn('API proxy call failed, trying direct host fetch:', error);
+    try {
+      const resDirect = await fetch('http://localhost/api/sandbox/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (resDirect.ok) {
+        const dataDirect = await resDirect.json();
+        return {
+          sandboxId: dataDirect.sandboxId,
+          previewUrl: dataDirect.previewUrl || getPreviewUrl(dataDirect.sandboxId),
+          message: dataDirect.message || 'Sandbox created successfully',
+        };
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    // Fallback sandbox state if backend server is offline
     const fallbackId = `019e${Math.random().toString(16).substring(2, 10)}-${Math.random().toString(16).substring(2, 6)}-70af-b4af-de437c588854`;
     return {
       sandboxId: fallbackId,
@@ -61,7 +92,7 @@ export const startSandbox = async () => {
 
 /**
  * 2. List Files
- * GET http://{sandboxId}.agent.localhost/list-files
+ * GET /agent-proxy/{sandboxId}/list-files -> Proxied to http://127.0.0.1/list-files (Host: {sandboxId}.agent.localhost)
  */
 export const listFiles = async (sandboxId) => {
   const agentUrl = getAgentUrl(sandboxId);
@@ -73,7 +104,16 @@ export const listFiles = async (sandboxId) => {
     const data = await res.json();
     return data.files || [];
   } catch (error) {
-    console.warn(`Failed to fetch file list from ${agentUrl}/list-files:`, error);
+    console.warn(`Proxy fetch failed for ${agentUrl}/list-files, attempting direct endpoint:`, error);
+    try {
+      const resDirect = await fetch(`${getDirectAgentUrl(sandboxId)}/list-files`);
+      if (resDirect.ok) {
+        const dataDirect = await resDirect.json();
+        return dataDirect.files || [];
+      }
+    } catch (err) {
+      // ignore
+    }
     // Fallback file tree data matching the spec prompt
     return [
       ".dockerignore",
@@ -102,7 +142,7 @@ export const listFiles = async (sandboxId) => {
 
 /**
  * 3. Read File Content
- * GET http://{sandboxId}.agent.localhost/read-files?files={filePath}
+ * GET /agent-proxy/{sandboxId}/read-files?files={filePath}
  */
 export const readFile = async (sandboxId, filePath) => {
   const agentUrl = getAgentUrl(sandboxId);
@@ -122,14 +162,29 @@ export const readFile = async (sandboxId, filePath) => {
     }
     return '';
   } catch (error) {
-    console.warn(`Failed to read file ${filePath} from agent:`, error);
+    console.warn(`Failed to read file ${filePath} from agent proxy, trying direct:`, error);
+    try {
+      const resDirect = await fetch(`${getDirectAgentUrl(sandboxId)}/read-files?files=${encodeURIComponent(filePath)}`);
+      if (resDirect.ok) {
+        const dataDirect = await resDirect.json();
+        if (dataDirect.files && Array.isArray(dataDirect.files) && dataDirect.files.length > 0) {
+          const fileObj = dataDirect.files[0];
+          const contentKey = Object.keys(fileObj).find(
+            (key) => key === filePath || key === `/${filePath}` || key.replace(/^\//, '') === filePath.replace(/^\//, '')
+          ) || Object.keys(fileObj)[0];
+          return fileObj[contentKey] || '';
+        }
+      }
+    } catch (err) {
+      // ignore
+    }
     return getFallbackFileContent(filePath);
   }
 };
 
 /**
  * 4. Update Files
- * PATCH http://{sandboxId}.agent.localhost/update-files
+ * PATCH /agent-proxy/{sandboxId}/update-files
  */
 export const updateFiles = async (sandboxId, updates) => {
   const agentUrl = getAgentUrl(sandboxId);
@@ -147,14 +202,24 @@ export const updateFiles = async (sandboxId, updates) => {
     }
     return await res.json();
   } catch (error) {
-    console.warn(`Failed to update files at ${agentUrl}/update-files:`, error);
+    console.warn(`Failed to update files at ${agentUrl}/update-files, trying direct:`, error);
+    try {
+      const resDirect = await fetch(`${getDirectAgentUrl(sandboxId)}/update-files`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ updates }),
+      });
+      if (resDirect.ok) return await resDirect.json();
+    } catch (e) {
+      // ignore
+    }
     return { message: 'Files updated (local simulation)', success: true };
   }
 };
 
 /**
  * 5. AI Invoke via SSE
- * POST http://localhost/api/ai/invoke
+ * POST /api/ai/invoke -> Proxied to http://127.0.0.1/api/ai/invoke
  */
 export const invokeAIStream = async (message, projectId, onChunk, onStatus, onError) => {
   try {
@@ -199,7 +264,6 @@ export const invokeAIStream = async (message, projectId, onChunk, onStatus, onEr
             content = trimmed.substring(5).trim();
           }
 
-          // Check for status events in SSE
           if (content.includes('Reading files...')) {
             onStatus && onStatus('Reading files', content);
           } else if (content.includes('Files read successfully.')) {

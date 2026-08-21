@@ -1,216 +1,243 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  Folder, 
-  FolderOpen, 
-  FileText, 
-  FileCode, 
-  FileJson, 
-  FileImage, 
-  Search, 
-  RefreshCw, 
-  ChevronRight, 
-  ChevronDown,
-  File,
-  Code2,
+import { useState, useEffect, useCallback } from 'react'
+import { apiFetch } from '../utils/api'
+import {
+  Folder,
+  FolderOpen,
+  ChevronRight,
+  FileCode,
+  FileJson,
+  FileText,
+  FileImage,
+  Lock,
   Terminal,
-  Settings
-} from 'lucide-react';
+  File
+} from 'lucide-react'
 
-/**
- * Builds nested tree from array of relative file paths
- */
-function buildFileTree(files) {
-  const root = { name: 'root', isDirectory: true, children: {} };
-
-  files.forEach((filePath) => {
-    const parts = filePath.split('/').filter(Boolean);
-    let current = root;
-
-    parts.forEach((part, index) => {
-      const isLast = index === parts.length - 1;
-      if (!current.children[part]) {
-        current.children[part] = {
-          name: part,
-          path: parts.slice(0, index + 1).join('/'),
-          isDirectory: !isLast,
-          children: isLast ? null : {},
-        };
-      }
-      current = current.children[part];
-    });
-  });
-
-  return root;
+const FILE_ICONS = {
+  jsx: { Icon: FileCode, color: '#61dafb' },
+  tsx: { Icon: FileCode, color: '#3178c6' },
+  js: { Icon: FileCode, color: '#f7df1e' },
+  ts: { Icon: FileCode, color: '#3178c6' },
+  css: { Icon: FileCode, color: '#38bdf8' },
+  html: { Icon: FileCode, color: '#ea580c' },
+  json: { Icon: FileJson, color: '#eab308' },
+  md: { Icon: FileText, color: '#38bdf8' },
+  png: { Icon: FileImage, color: '#10b981' },
+  svg: { Icon: FileImage, color: '#f97316' },
+  jpg: { Icon: FileImage, color: '#10b981' },
+  jpeg: { Icon: FileImage, color: '#10b981' },
+  env: { Icon: Lock, color: '#ef4444' },
+  gitignore: { Icon: FileText, color: '#64748b' },
+  dockerfile: { Icon: Terminal, color: '#0ea5e9' },
+  default: { Icon: File, color: '#94a3b8' }
 }
 
-/**
- * Renders file type icon
- */
-function getFileIcon(filename) {
-  const ext = filename.split('.').pop()?.toLowerCase();
-
-  if (filename === 'package.json' || filename === 'package-lock.json') {
-    return <FileJson className="w-4 h-4 text-emerald-400 shrink-0" />;
+function getIcon(filename) {
+  const lowercaseName = filename.toLowerCase()
+  
+  if (FILE_ICONS[lowercaseName]) {
+    const { Icon, color } = FILE_ICONS[lowercaseName]
+    return <Icon size={14} style={{ color }} />
   }
-  if (filename.includes('docker') || filename.includes('Dockerfile')) {
-    return <Terminal className="w-4 h-4 text-blue-400 shrink-0" />;
+  
+  const parts = filename.split('.')
+  if (parts.length > 1) {
+    const ext = parts[parts.length - 1].toLowerCase()
+    if (FILE_ICONS[ext]) {
+      const { Icon, color } = FILE_ICONS[ext]
+      return <Icon size={14} style={{ color }} />
+    }
   }
-  if (filename.includes('config') || filename.startsWith('.')) {
-    return <Settings className="w-4 h-4 text-slate-400 shrink-0" />;
-  }
-
-  switch (ext) {
-    case 'jsx':
-    case 'js':
-    case 'ts':
-    case 'tsx':
-      return <Code2 className="w-4 h-4 text-cyan-400 shrink-0" />;
-    case 'css':
-    case 'scss':
-      return <FileCode className="w-4 h-4 text-blue-400 shrink-0" />;
-    case 'html':
-      return <FileCode className="w-4 h-4 text-amber-400 shrink-0" />;
-    case 'json':
-      return <FileJson className="w-4 h-4 text-yellow-400 shrink-0" />;
-    case 'md':
-      return <FileText className="w-4 h-4 text-slate-300 shrink-0" />;
-    case 'png':
-    case 'svg':
-    case 'jpg':
-    case 'ico':
-      return <FileImage className="w-4 h-4 text-purple-400 shrink-0" />;
-    default:
-      return <File className="w-4 h-4 text-slate-400 shrink-0" />;
-  }
+  
+  const { Icon, color } = FILE_ICONS.default
+  return <Icon size={14} style={{ color }} />
 }
 
-function TreeNode({ node, activeFile, onSelectFile, filterQuery }) {
-  const [isOpen, setIsOpen] = useState(true);
+function buildTree(files) {
+  const root = {}
+  files.forEach(path => {
+    const parts = path.split('/')
+    let node = root
+    parts.forEach((part, i) => {
+      if (!node[part]) node[part] = i === parts.length - 1 ? null : {}
+      if (i < parts.length - 1) node = node[part]
+    })
+  })
+  return root
+}
 
-  if (!node.isDirectory) {
-    const isSelected = activeFile === node.path;
+function TreeNode({ name, node, depth, agentBase, activeFile, onFileSelect, path }) {
+  const [open, setOpen] = useState(depth < 2)
+  const isDir = node !== null && typeof node === 'object'
+  const fullPath = path ? `${path}/${name}` : name
+  const isActive = activeFile === fullPath
+
+  if (isDir) {
     return (
-      <button
-        onClick={() => onSelectFile(node.path)}
-        className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded-md text-left transition-colors font-mono ${
-          isSelected 
-            ? 'bg-indigo-600/30 text-indigo-200 border-l-2 border-indigo-500 font-medium' 
-            : 'text-slate-300 hover:bg-slate-800/60 hover:text-white'
-        }`}
-      >
-        {getFileIcon(node.name)}
-        <span className="truncate">{node.name}</span>
-      </button>
-    );
+      <div>
+        <button onClick={() => setOpen(o => !o)}
+          className="flex items-center gap-1.5 w-full text-left px-2 py-0.5 rounded transition-colors duration-100 cursor-pointer"
+          style={{
+            paddingLeft: `${8 + depth * 14}px`,
+            color: '#94a3b8',
+            fontSize: '13px'
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+          <ChevronRight 
+            size={14} 
+            className="transition-transform duration-150 shrink-0" 
+            style={{ 
+              transform: open ? 'rotate(90deg)' : 'none', 
+              color: '#475569' 
+            }} 
+          />
+          <span className="flex items-center justify-center shrink-0 w-4 h-4">
+            {open ? (
+              <FolderOpen size={14} style={{ color: '#38bdf8' }} />
+            ) : (
+              <Folder size={14} style={{ color: '#38bdf8' }} />
+            )}
+          </span>
+          <span className="truncate">{name}</span>
+        </button>
+        {open && (
+          <div>
+            {Object.entries(node).sort(([, a], [, b]) => {
+              const aDir = a !== null && typeof a === 'object'
+              const bDir = b !== null && typeof b === 'object'
+              return bDir - aDir
+            }).map(([childName, childNode]) => (
+              <TreeNode key={childName} name={childName} node={childNode}
+                depth={depth + 1} agentBase={agentBase} activeFile={activeFile}
+                onFileSelect={onFileSelect} path={fullPath} />
+            ))}
+          </div>
+        )}
+      </div>
+    )
   }
 
-  const childrenArray = Object.values(node.children || {}).sort((a, b) => {
-    if (a.isDirectory === b.isDirectory) return a.name.localeCompare(b.name);
-    return a.isDirectory ? -1 : 1;
-  });
-
   return (
-    <div className="select-none">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center gap-1.5 px-2 py-1 text-xs text-slate-400 hover:text-slate-200 font-medium text-left hover:bg-slate-800/40 rounded-md transition-colors"
-      >
-        {isOpen ? (
-          <ChevronDown className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-        ) : (
-          <ChevronRight className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-        )}
-        {isOpen ? (
-          <FolderOpen className="w-4 h-4 text-indigo-400 shrink-0" />
-        ) : (
-          <Folder className="w-4 h-4 text-indigo-400 shrink-0" />
-        )}
-        <span className="truncate">{node.name}</span>
-      </button>
-
-      {isOpen && (
-        <div className="pl-3 border-l border-slate-800/60 ml-2.5 my-0.5 space-y-0.5">
-          {childrenArray.map((childNode) => (
-            <TreeNode
-              key={childNode.path}
-              node={childNode}
-              activeFile={activeFile}
-              onSelectFile={onSelectFile}
-              filterQuery={filterQuery}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
+    <button onClick={() => onFileSelect(fullPath)}
+      className="flex items-center gap-1.5 w-full text-left px-2 py-0.5 rounded transition-all duration-100 cursor-pointer"
+      style={{
+        paddingLeft: `${8 + depth * 14}px`,
+        fontSize: '13px',
+        color: isActive ? '#22d3ee' : '#94a3b8',
+        background: isActive ? 'rgba(34,211,238,0.08)' : 'transparent',
+        borderLeft: isActive ? '2px solid #22d3ee' : '2px solid transparent'
+      }}
+      onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = '#e2e8f0' } }}
+      onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#94a3b8' } }}>
+      <span className="flex items-center justify-center shrink-0 w-4 h-4">{getIcon(name)}</span>
+      <span className="truncate">{name}</span>
+    </button>
+  )
 }
 
-export default function FileExplorer({ files = [], activeFile, onSelectFile, onRefresh, isLoading }) {
-  const [filterQuery, setFilterQuery] = useState('');
+export default function FileExplorer({ agentBase, activeFile, onFileSelect, refreshKey, podReady, setPodReady }) {
+  const [files, setFiles] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [tree, setTree] = useState({})
 
-  const filteredFiles = useMemo(() => {
-    if (!filterQuery.trim()) return files;
-    return files.filter((f) => f.toLowerCase().includes(filterQuery.toLowerCase()));
-  }, [files, filterQuery]);
+  const fetchFiles = useCallback(async (isSilent = false) => {
+    const silent = isSilent === true
+    if (!agentBase) return false
+    if (!silent) {
+      setLoading(true)
+    }
+    setError(null)
+    try {
+      const res = await apiFetch(`${agentBase}/list-files`)
+      if (!res.ok) {
+        throw new Error('Failed to fetch')
+      }
+      const data = await res.json()
+      const fileList = data.files || []
+      setFiles(fileList)
+      setTree(buildTree(fileList))
+      setPodReady(true)
+      return true
+    } catch {
+      setError('Failed to load files')
+      return false
+    } finally {
+      if (!silent) {
+        setLoading(false)
+      }
+    }
+  }, [agentBase])
 
-  const tree = useMemo(() => buildFileTree(filteredFiles), [filteredFiles]);
-  const rootChildren = Object.values(tree.children).sort((a, b) => {
-    if (a.isDirectory === b.isDirectory) return a.name.localeCompare(b.name);
-    return a.isDirectory ? -1 : 1;
-  });
+  useEffect(() => {
+    setPodReady(false)
+  }, [agentBase, refreshKey])
+
+  useEffect(() => {
+    if (!agentBase || podReady) return
+
+    // Perform the initial non-silent load
+    fetchFiles(false)
+
+    // Poll every 3 seconds silently until the pod is ready and files are loaded
+    const interval = setInterval(() => {
+      fetchFiles(true)
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [agentBase, podReady, fetchFiles])
 
   return (
-    <div className="h-full flex flex-col bg-slate-900/90 border-r border-slate-800/80 select-none overflow-hidden">
-      {/* Header Bar */}
-      <div className="p-3 border-b border-slate-800/80 flex items-center justify-between">
-        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-          <span>Files</span>
-          <span className="px-1.5 py-0.5 rounded-full bg-slate-800 text-[10px] text-slate-400 font-mono">
-            {files.length}
-          </span>
+    <aside className="flex flex-col h-full"
+      style={{ width: '220px', minWidth: '220px', background: '#0d1424', borderRight: '1px solid #1e2d45' }}>
+      
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2 shrink-0"
+        style={{ borderBottom: '1px solid #1e2d45' }}>
+        <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#475569' }}>
+          Explorer
         </span>
-        <button
-          onClick={onRefresh}
-          disabled={isLoading}
-          className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
-          title="Refresh File List"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-indigo-400' : ''}`} />
+        <button onClick={fetchFiles} className="p-1 rounded transition-colors cursor-pointer"
+          style={{ color: '#475569' }}
+          onMouseEnter={e => e.currentTarget.style.color = '#22d3ee'}
+          onMouseLeave={e => e.currentTarget.style.color = '#475569'}
+          title="Refresh">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <path d="M23 4v6h-6M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
         </button>
       </div>
 
-      {/* Filter / Search Input */}
-      <div className="p-2 border-b border-slate-800/60">
-        <div className="relative">
-          <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search files..."
-            value={filterQuery}
-            onChange={(e) => setFilterQuery(e.target.value)}
-            className="w-full bg-slate-950/80 border border-slate-800 rounded-md pl-8 pr-2 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
-          />
-        </div>
-      </div>
-
-      {/* File Tree List */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-        {rootChildren.length === 0 ? (
-          <div className="p-4 text-center text-xs text-slate-500 font-mono">
-            {isLoading ? 'Loading workspace files...' : 'No files found.'}
+      {/* File Tree */}
+      <div className="flex-1 overflow-y-auto py-1">
+        {loading ? (
+          <div className="flex items-center justify-center h-20">
+            <div className="w-4 h-4 rounded-full border-2 border-t-transparent animate-spin"
+              style={{ borderColor: '#22d3ee', borderTopColor: 'transparent' }} />
           </div>
+        ) : error ? (
+          <div className="px-3 py-4 text-xs" style={{ color: '#ef4444' }}>{error}</div>
         ) : (
-          rootChildren.map((node) => (
-            <TreeNode
-              key={node.path}
-              node={node}
-              activeFile={activeFile}
-              onSelectFile={onSelectFile}
-              filterQuery={filterQuery}
-            />
+          Object.entries(tree).sort(([, a], [, b]) => {
+            const aDir = a !== null && typeof a === 'object'
+            const bDir = b !== null && typeof b === 'object'
+            return bDir - aDir
+          }).map(([name, node]) => (
+            <TreeNode key={name} name={name} node={node}
+              depth={0} agentBase={agentBase} activeFile={activeFile}
+              onFileSelect={onFileSelect} path="" />
           ))
         )}
       </div>
-    </div>
-  );
+
+      {/* Footer — file count */}
+      {!loading && files.length > 0 && (
+        <div className="px-3 py-1.5 shrink-0" style={{ borderTop: '1px solid #1e2d45' }}>
+          <span className="text-xs" style={{ color: '#334155' }}>{files.length} files</span>
+        </div>
+      )}
+    </aside>
+  )
 }

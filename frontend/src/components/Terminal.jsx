@@ -1,192 +1,195 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { io } from 'socket.io-client';
-import { Terminal as XTerm } from '@xterm/xterm';
-import { FitAddon } from '@xterm/addon-fit';
-import '@xterm/xterm/css/xterm.css';
-import { Terminal as TerminalIcon, RefreshCw, Trash2, Wifi, WifiOff } from 'lucide-react';
-import { getAgentUrl } from '../services/api';
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { Terminal as XTerm } from '@xterm/xterm'
+import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import { io } from 'socket.io-client'
 
-export default function Terminal({ sandboxId, isOpen, onClose }) {
-  const terminalRef = useRef(null);
-  const xtermRef = useRef(null);
-  const fitAddonRef = useRef(null);
-  const socketRef = useRef(null);
-  const [isConnected, setIsConnected] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('Connecting to terminal socket...');
+export default function Terminal({ sandboxId, podReady }) {
+  const containerRef = useRef(null)
+  const termRef = useRef(null)
+  const fitAddonRef = useRef(null)
+  const socketRef = useRef(null)
+  const [connected, setConnected] = useState(false)
+  const [error, setError] = useState(null)
+
+  const initTerminal = useCallback(() => {
+    if (!containerRef.current || termRef.current) return
+
+    const term = new XTerm({
+      theme: {
+        background: '#070b14',
+        foreground: '#e2e8f0',
+        cursor: '#22d3ee',
+        cursorAccent: '#070b14',
+        selectionBackground: 'rgba(34,211,238,0.2)',
+        black: '#1e2d45',
+        red: '#ef4444',
+        green: '#10b981',
+        yellow: '#f59e0b',
+        blue: '#3b82f6',
+        magenta: '#a78bfa',
+        cyan: '#22d3ee',
+        white: '#e2e8f0',
+        brightBlack: '#334155',
+        brightRed: '#f87171',
+        brightGreen: '#34d399',
+        brightYellow: '#fbbf24',
+        brightBlue: '#60a5fa',
+        brightMagenta: '#c4b5fd',
+        brightCyan: '#67e8f9',
+        brightWhite: '#f8fafc',
+      },
+      fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", monospace',
+      fontSize: 13,
+      lineHeight: 1.5,
+      cursorBlink: true,
+      cursorStyle: 'bar',
+      scrollback: 5000,
+      allowProposedApi: true,
+    })
+
+    const fitAddon = new FitAddon()
+    const webLinksAddon = new WebLinksAddon()
+    term.loadAddon(fitAddon)
+    term.loadAddon(webLinksAddon)
+    term.open(containerRef.current)
+    fitAddon.fit()
+
+    termRef.current = term
+    fitAddonRef.current = fitAddon
+
+    term.writeln('\x1b[36m╔══════════════════════════════════════╗\x1b[0m')
+    term.writeln('\x1b[36m║   \x1b[1mSandbox Terminal\x1b[0m\x1b[36m                  ║\x1b[0m')
+    term.writeln('\x1b[36m╚══════════════════════════════════════╝\x1b[0m')
+    term.writeln('')
+    term.writeln('\x1b[33mConnecting to sandbox...\x1b[0m')
+
+    return term
+  }, [])
+
+  const connectSocket = useCallback((term) => {
+    if (!sandboxId || !term) return
+
+    const agentHost = typeof window !== 'undefined' && window.location.hostname === 'localhost'
+      ? `/agent-proxy/${sandboxId}`
+      : `http://${sandboxId}.agent.localhost`
+
+    try {
+      const socket = io(agentHost, {
+        transports: ['websocket', 'polling'],
+        reconnectionAttempts: 5,
+        reconnectionDelay: 3000,
+      })
+
+      socketRef.current = socket
+
+      socket.on('connect', () => {
+        setConnected(true)
+        setError(null)
+        term.writeln('\x1b[32m✓ Connected to sandbox shell\x1b[0m')
+        term.writeln('')
+      })
+
+      socket.on('disconnect', () => {
+        setConnected(false)
+        term.writeln('\r\n\x1b[33m⚠ Disconnected. Reconnecting...\x1b[0m')
+      })
+
+      socket.on('connect_error', (err) => {
+        setConnected(false)
+        setError('Connection failed')
+        term.writeln(`\r\n\x1b[31m✗ Connection error: ${err.message}\x1b[0m`)
+      })
+
+      socket.on('terminal-output', (data) => {
+        term.write(data)
+      })
+
+      term.onData((data) => {
+        socket.emit('terminal-input', data)
+      })
+
+    } catch (err) {
+      setTimeout(() => {
+        setError(err.message)
+      }, 0)
+    }
+  }, [sandboxId])
 
   useEffect(() => {
-    if (!sandboxId || !isOpen || !terminalRef.current) return;
+    if (!podReady) return
 
-    // Create xterm instance
-    const term = new XTerm({
-      cursorBlink: true,
-      cursorStyle: 'block',
-      theme: {
-        background: '#0d1117',
-        foreground: '#c9d1d9',
-        cursor: '#58a6ff',
-        selectionBackground: '#1f6feb',
-        black: '#484f58',
-        red: '#ff7b72',
-        green: '#3fb950',
-        yellow: '#d29922',
-        blue: '#58a6ff',
-        magenta: '#bc8cff',
-        cyan: '#39c5cf',
-        white: '#b1bac4',
-      },
-      fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace",
-      fontSize: 13,
-      lineHeight: 1.2,
-    });
-
-    const fitAddon = new FitAddon();
-    term.loadAddon(fitAddon);
-    term.open(terminalRef.current);
-    fitAddon.fit();
-
-    xtermRef.current = term;
-    fitAddonRef.current = fitAddon;
-
-    term.writeln('\x1b[1;34m=== Sandbox Terminal Initialized ===\x1b[0m');
-    term.writeln(`Connecting socket to \x1b[33mhttp://${sandboxId}.agent.localhost\x1b[0m...\r\n`);
-
-    // Initialize Socket.io connection to agent
-    const agentSocketUrl = getAgentUrl(sandboxId);
-    const socket = io(agentSocketUrl, {
-      transports: ['websocket', 'polling'],
-      timeout: 5000,
-      reconnectionAttempts: 5,
-    });
-
-    socketRef.current = socket;
-
-    socket.on('connect', () => {
-      setIsConnected(true);
-      setStatusMessage('Connected');
-      term.writeln('\r\n\x1b[1;32m[Connected to Sandbox Shell]\x1b[0m\r\n');
-    });
-
-    socket.on('disconnect', () => {
-      setIsConnected(false);
-      setStatusMessage('Disconnected');
-      term.writeln('\r\n\x1b[1;31m[Socket Disconnected]\x1b[0m\r\n');
-    });
-
-    socket.on('connect_error', (err) => {
-      setIsConnected(false);
-      setStatusMessage('Local Shell Mode');
-      // Graceful fallback echo so terminal remains interactive for demo/testing
-    });
-
-    // 1. Listen for terminal output from backend
-    socket.on('terminal-output', (data) => {
-      term.write(data);
-    });
-
-    // 2. Send terminal input to backend socket
-    const dataDisposable = term.onData((data) => {
-      if (socket.connected) {
-        socket.emit('terminal-input', data);
-      } else {
-        // Fallback local echo mode if socket connection is offline
-        if (data === '\r') {
-          term.write('\r\n\x1b[34m$ \x1b[0m');
-        } else if (data === '\u007F') {
-          term.write('\b \b');
-        } else {
-          term.write(data);
-        }
-      }
-    });
-
-    // Resize listener
-    const handleResize = () => {
-      try {
-        fitAddon.fit();
-      } catch (e) {
-        // ignore fit error on hidden container
-      }
-    };
-    window.addEventListener('resize', handleResize);
+    const term = initTerminal()
+    if (term) connectSocket(term)
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      dataDisposable.dispose();
-      socket.disconnect();
-      term.dispose();
-    };
-  }, [sandboxId, isOpen]);
+      if (socketRef.current) { socketRef.current.disconnect(); socketRef.current = null }
+      if (termRef.current) { termRef.current.dispose(); termRef.current = null }
+    }
+  }, [podReady, initTerminal, connectSocket])
 
-  // Refit when tab/panel opens
+  // Handle resize
   useEffect(() => {
-    if (isOpen && fitAddonRef.current) {
-      setTimeout(() => {
-        try {
-          fitAddonRef.current.fit();
-        } catch (e) {}
-      }, 100);
-    }
-  }, [isOpen]);
-
-  const handleClear = () => {
-    if (xtermRef.current) {
-      xtermRef.current.clear();
-    }
-  };
-
-  const handleReconnect = () => {
-    if (socketRef.current) {
-      socketRef.current.connect();
-    }
-  };
-
-  if (!isOpen) return null;
+    const observer = new ResizeObserver(() => {
+      if (fitAddonRef.current) {
+        try { fitAddonRef.current.fit() } catch {
+          // Ignore resize errors if terminal is not fully initialized or visible
+        }
+      }
+    })
+    if (containerRef.current) observer.observe(containerRef.current)
+    return () => observer.disconnect()
+  }, [])
 
   return (
-    <div className="h-full flex flex-col bg-[#0d1117] border-t border-slate-800 select-none overflow-hidden">
-      {/* Terminal Header */}
-      <div className="h-9 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between shrink-0">
+    <div className="flex flex-col h-full"
+      style={{ background: '#070b14' }}>
+
+      {/* Terminal toolbar */}
+      <div className="flex items-center justify-between px-3 shrink-0"
+        style={{ height: '32px', background: '#0d1424', borderBottom: '1px solid #1e2d45' }}>
         <div className="flex items-center gap-2">
-          <TerminalIcon className="w-3.5 h-3.5 text-blue-400" />
-          <span className="text-xs font-semibold text-slate-300 font-mono">Terminal Shell</span>
-          <div className="flex items-center gap-1.5 ml-2 px-2 py-0.5 rounded-full bg-slate-950 border border-slate-800 text-[10px]">
-            {isConnected ? (
-              <>
-                <Wifi className="w-3 h-3 text-emerald-400" />
-                <span className="text-emerald-400 font-mono">Connected</span>
-              </>
-            ) : (
-              <>
-                <WifiOff className="w-3 h-3 text-amber-400" />
-                <span className="text-amber-400 font-mono">{statusMessage}</span>
-              </>
-            )}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
+            <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+          </svg>
+          <span className="text-xs font-medium" style={{ color: '#475569' }}>Terminal</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {error && (
+            <span className="text-xs" style={{ color: '#ef4444' }}>{error}</span>
+          )}
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full"
+              style={{ background: connected ? '#10b981' : '#ef4444', boxShadow: `0 0 6px ${connected ? '#10b981' : '#ef4444'}` }} />
+            <span className="text-xs" style={{ color: '#475569' }}>
+              {connected ? 'Connected' : 'Disconnected'}
+            </span>
           </div>
         </div>
+      </div>
 
-        <div className="flex items-center gap-1">
-          <button
-            onClick={handleClear}
-            className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
-            title="Clear Terminal"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={handleReconnect}
-            className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded transition-colors"
-            title="Reconnect Socket"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
+      {/* Terminal Body */}
+      {!podReady ? (
+        <div className="flex-1 flex flex-col items-center justify-center bg-[#070b14] text-center p-4 animate-pulse">
+          <div className="flex items-center gap-3">
+            <div className="relative w-5 h-5">
+              <div className="absolute inset-0 rounded-full border-2 border-slate-800" />
+              <div className="absolute inset-0 rounded-full border-2 border-t-transparent animate-spin"
+                style={{ borderColor: '#22d3ee', borderTopColor: 'transparent' }} />
+            </div>
+            <div className="text-left">
+              <h4 className="text-xs font-semibold text-slate-300">
+                Connecting Terminal Shell
+              </h4>
+              <p className="text-[10px] text-slate-500 font-mono">
+                Waiting for the development environment pod...
+              </p>
+            </div>
+          </div>
         </div>
-      </div>
-
-      {/* Terminal XTerm Container */}
-      <div className="flex-1 relative w-full h-full p-1 overflow-hidden">
-        <div ref={terminalRef} className="w-full h-full" />
-      </div>
+      ) : (
+        <div ref={containerRef} className="flex-1 overflow-hidden p-1" />
+      )}
     </div>
-  );
+  )
 }
