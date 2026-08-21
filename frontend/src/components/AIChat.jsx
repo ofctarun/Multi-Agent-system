@@ -177,7 +177,6 @@ export default function AiChat({ sandboxId, onFilesChanged, podReady }) {
     let activityLines = []
 
     try {
-      // Use fetch with SSE manually
       const response = await apiFetch('/api/ai/invoke', {
         method: 'POST',
         headers: {
@@ -200,38 +199,75 @@ export default function AiChat({ sandboxId, onFilesChanged, podReady }) {
         ))
       }
 
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
+      let streamDone = false
+      while (!streamDone) {
+        // Race between reader.read() and a 5-second timeout
+        // This handles the backend not cleanly closing the SSE connection
+        const readPromise = reader.read()
+        const timeoutPromise = new Promise((resolve) =>
+          setTimeout(() => resolve({ done: true, value: undefined, timedOut: true }), 5000)
+        )
 
-        buffer += decoder.decode(value, { stream: true })
-        const lines = buffer.split('\n')
-        buffer = lines.pop()
+        const result = await Promise.race([readPromise, timeoutPromise])
+        if (result.done || result.timedOut) {
+          streamDone = true
+          // Cancel the reader if we timed out
+          try { reader.cancel() } catch {}
+          break
+        }
 
-        for (const line of lines) {
-          if (!line.trim()) continue
+        buffer += decoder.decode(result.value, { stream: true })
 
-          if (line.startsWith('act:')) {
-            const actText = line.substring(4)
-            const parsed = parseActivityLine(actText)
-            if (parsed) {
-              activityLines = [...activityLines, parsed]
+        // SSE events are separated by double newlines: "data: <text>\n\n"
+        const events = buffer.split('\n\n')
+        buffer = events.pop() // keep incomplete event in buffer
+
+        for (const event of events) {
+          if (!event.trim()) continue
+
+          const dataLines = event.split('\n')
+          for (const line of dataLines) {
+            let content = line
+            if (line.startsWith('data: ')) {
+              content = line.substring(6)
+            } else if (line.startsWith('data:')) {
+              content = line.substring(5)
             }
-          } else if (line.startsWith('msg:')) {
-            const msgLine = line.substring(4)
-            aiContent = aiContent ? `${aiContent}\n${msgLine}` : msgLine
-          } else {
-            // Fallback for unexpected or legacy formats
-            const parsed = parseActivityLine(line)
+
+            if (!content.trim()) continue
+
+            // Skip any JSON the backend sends after stream (res.json)
+            if (content.trim().startsWith('{') && content.includes('"response"')) continue
+
+            const parsed = parseActivityLine(content)
             if (parsed) {
               if (parsed.type !== 'info') {
                 activityLines = [...activityLines, parsed]
               } else {
-                aiContent = aiContent ? `${aiContent}\n${line}` : line
+                aiContent = aiContent ? `${aiContent}\n${content}` : content
               }
             }
           }
           updateMsg()
+        }
+      }
+
+      // Process any remaining buffer content
+      if (buffer.trim()) {
+        const remaining = buffer.trim()
+        if (!remaining.startsWith('{')) {
+          let content = remaining
+          if (content.startsWith('data: ')) content = content.substring(6)
+          else if (content.startsWith('data:')) content = content.substring(5)
+          
+          if (content.trim()) {
+            const parsed = parseActivityLine(content)
+            if (parsed && parsed.type !== 'info') {
+              activityLines = [...activityLines, parsed]
+            } else if (content.trim()) {
+              aiContent = aiContent ? `${aiContent}\n${content}` : content
+            }
+          }
         }
       }
 
