@@ -200,18 +200,18 @@ export default function AiChat({ sandboxId, onFilesChanged, podReady }) {
       }
 
       let streamDone = false
+      let idleTimeout = 60000  // 60s for slow tool calls (e.g. PATCH to sandbox)
+      let gotCompletion = false
+
       while (!streamDone) {
-        // Race between reader.read() and a 5-second timeout
-        // This handles the backend not cleanly closing the SSE connection
         const readPromise = reader.read()
         const timeoutPromise = new Promise((resolve) =>
-          setTimeout(() => resolve({ done: true, value: undefined, timedOut: true }), 5000)
+          setTimeout(() => resolve({ done: true, value: undefined, timedOut: true }), idleTimeout)
         )
 
         const result = await Promise.race([readPromise, timeoutPromise])
         if (result.done || result.timedOut) {
           streamDone = true
-          // Cancel the reader if we timed out
           try { reader.cancel() } catch {}
           break
         }
@@ -237,7 +237,10 @@ export default function AiChat({ sandboxId, onFilesChanged, podReady }) {
             if (!content.trim()) continue
 
             // Skip any JSON the backend sends after stream (res.json)
-            if (content.trim().startsWith('{') && content.includes('"response"')) continue
+            if (content.trim().startsWith('{') && content.includes('"response"')) {
+              gotCompletion = true
+              continue
+            }
 
             const parsed = parseActivityLine(content)
             if (parsed) {
@@ -246,9 +249,18 @@ export default function AiChat({ sandboxId, onFilesChanged, podReady }) {
               } else {
                 aiContent = aiContent ? `${aiContent}\n${content}` : content
               }
+              // If we see a final "success" after updating/creating, shorten the idle timeout
+              if (parsed.type === 'success' && activityLines.some(a => a.type === 'updating')) {
+                gotCompletion = true
+              }
             }
           }
           updateMsg()
+        }
+
+        // Once we've detected completion, use a short 3s idle to catch any trailing data
+        if (gotCompletion && idleTimeout > 3000) {
+          idleTimeout = 3000
         }
       }
 
