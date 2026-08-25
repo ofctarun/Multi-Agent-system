@@ -70,15 +70,16 @@ export default function Terminal({ sandboxId, podReady }) {
   const connectSocket = useCallback((term) => {
     if (!sandboxId || !term) return
 
-    const agentHost = typeof window !== 'undefined' && window.location.hostname === 'localhost'
-      ? `/agent-proxy/${sandboxId}`
-      : `http://${sandboxId}.agent.localhost`
-
     try {
-      const socket = io(agentHost, {
+      // Connect through the Vite proxy to avoid *.localhost DNS issues on Windows.
+      // Socket.IO connects to the current origin (localhost:5173) with a custom path
+      // that routes through /agent-proxy → Vite plugin sets Host header → K8s router → agent
+      const socket = io(window.location.origin, {
+        path: `/agent-proxy/${sandboxId}/socket.io`,
         transports: ['websocket', 'polling'],
-        reconnectionAttempts: 5,
+        reconnectionAttempts: 10,
         reconnectionDelay: 3000,
+        timeout: 10000,
       })
 
       socketRef.current = socket
