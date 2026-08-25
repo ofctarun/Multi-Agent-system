@@ -1,30 +1,31 @@
-import { useRef, useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useCallback } from 'react'
 
 export default function PreviewFrame({ sandboxId, previewUrl, podReady, fileRefreshKey }) {
   const iframeRef = useRef(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [loading, setLoading] = useState(true)
-  const initialFileKey = useRef(fileRefreshKey)
+  const prevFileKeyRef = useRef(fileRefreshKey)
 
-  // Direct preview URL e.g. http://01a022c2-c028-76a9-90e9-70f7375eabe6.preview.localhost/
+  // Preview URL — use direct subdomain (Chrome resolves *.localhost to 127.0.0.1)
   const activeUrl = previewUrl || (sandboxId ? `http://${sandboxId}.preview.localhost/` : '')
 
-  // Auto-refresh when files change (since HMR is disabled in sandbox)
+  // Auto-refresh when files change (since HMR + watch are disabled in sandbox)
   useEffect(() => {
-    // Skip the initial mount — only refresh on subsequent file changes
-    if (fileRefreshKey === initialFileKey.current) return
-    // Small delay so the sandbox Vite server can pick up the file changes
+    if (fileRefreshKey === prevFileKeyRef.current) return
+    prevFileKeyRef.current = fileRefreshKey
+
+    // Delay to let the sandbox Vite server pick up file changes
     const timer = setTimeout(() => {
       setLoading(true)
       setRefreshKey(k => k + 1)
-    }, 1500)
+    }, 2000)
     return () => clearTimeout(timer)
   }, [fileRefreshKey])
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     setLoading(true)
     setRefreshKey(k => k + 1)
-  }
+  }, [])
 
   return (
     <div className="flex flex-col h-full w-full">
@@ -111,6 +112,7 @@ export default function PreviewFrame({ sandboxId, previewUrl, podReady, fileRefr
             className="w-full h-full border-0"
             style={{ background: '#fff' }}
             title="Sandbox Preview"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
             onLoad={() => setLoading(false)}
           />
         )}
